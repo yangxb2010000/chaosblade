@@ -21,7 +21,7 @@ RUN wget https://dl.google.com/go/go1.20.5.linux-arm64.tar.gz \
     && rm -rf go1.20.5.linux-arm64.tar.gz
 
 # install maven for java project compiled
-RUN wget http://mirrors.tuna.tsinghua.edu.cn/apache/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz \
+RUN wget https://archive.apache.org/dist/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz \
     && tar -zxvf apache-maven-3.6.3-bin.tar.gz \
     && rm apache-maven-3.6.3-bin.tar.gz \
     && mv apache-maven-3.6.3 /usr/local/apache-maven-3.6.3

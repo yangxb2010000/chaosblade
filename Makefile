@@ -41,6 +41,7 @@ BUILD_TARGET_TAR_NAME=$(BUILD_TARGET_DIR_NAME).tar.gz
 BUILD_TARGET_PKG_FILE_PATH=$(BUILD_TARGET)/$(BUILD_TARGET_TAR_NAME)
 BUILD_IMAGE_PATH=build/image/blade
 BUILD_ARM_IMAGE_PATH=build/image/blade_arm
+BUILD_ARM_IMAGE_BUILD_PATH=build/image/arm
 # cache downloaded file
 BUILD_TARGET_CACHE=$(BUILD_TARGET)/cache
 
@@ -93,7 +94,8 @@ help:
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>...\033[0m\n"} /^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-20s\033[0m  %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 ##@ Build
-build: pre_build cli nsexec os cloud middleware cri cplus java kubernetes package check_yaml  ## Build all scenarios
+#build: pre_build cli nsexec os cloud middleware cri cplus java kubernetes package check_yaml  ## Build all scenarios
+build: pre_build cli os middleware cri cplus java kubernetes package check_yaml  ## Build all scenarios
 #build: pre_build cli nsexec os cloud middleware cri cplus java kubernetes upx package check_yaml  ## Build all scenarios
 
 # for example: make build_with cli
@@ -106,10 +108,11 @@ build_with_linux_arm: pre_build build_linux_arm_with_arg ## Select scenario buil
 
 # build chaosblade linux version by docker image
 build_linux:  ## Build linux version of all scenarios by docker image
-	make build_with_linux ARGS="cli os cloud middleware cri nsexec kubernetes java cplus check_yaml" upx package
+	#make build_with_linux ARGS="cli os cloud middleware cri nsexec kubernetes java cplus check_yaml" upx package
+	make build_with_linux ARGS="cli os middleware java cplus check_yaml" upx package
 
 build_linux_arm:  ## Build linux arm version of all scenarios by docker image
-	make build_with_linux_arm ARGS="cli os cloud middleware cri nsexec kubernetes java cplus check_yaml" upx package
+	make build_with_linux_arm ARGS="cli os cloud middleware cri nsexec java cplus check_yaml" upx package
 
 build_darwin: pre_build cli os cloud middleware cri cplus java kubernetes upx package check_yaml ## Build all scenarios darwin version
 
@@ -123,6 +126,7 @@ pre_build: mkdir_build_target ## Mkdir build target
 # build chaosblade cli: blade
 .PHONY:cli
 cli: ## Build blade cli
+	$(GO) mod tidy
 	$(GO) build $(GO_FLAGS) -o $(BUILD_TARGET_PKG_DIR)/blade ./cli
 
 nsexec: ## Build nsexecgo
@@ -137,6 +141,7 @@ ifdef ALERTMSG
 endif
 	git -C $(BUILD_TARGET_CACHE)/chaosblade-exec-os pull origin $(BLADE_EXEC_OS_BRANCH)
 endif
+	cd $(BUILD_TARGET_CACHE)/chaosblade-exec-os && go mod tidy && cd $(BLADE_SRC_ROOT)
 	make -C $(BUILD_TARGET_CACHE)/chaosblade-exec-os
 	cp $(BUILD_TARGET_CACHE)/chaosblade-exec-os/$(BUILD_TARGET_BIN)/* $(BUILD_TARGET_BIN)
 	cp $(BUILD_TARGET_CACHE)/chaosblade-exec-os/$(BUILD_TARGET_YAML)/* $(BUILD_TARGET_YAML)
@@ -150,6 +155,7 @@ ifdef ALERTMSG
 endif
 	git -C $(BUILD_TARGET_CACHE)/chaosblade-exec-middleware pull origin $(BLADE_EXEC_MIDDLEWARE_BRANCH)
 endif
+	cd $(BUILD_TARGET_CACHE)/chaosblade-exec-middleware && go mod tidy && cd $(BLADE_SRC_ROOT)
 	make -C $(BUILD_TARGET_CACHE)/chaosblade-exec-middleware
 	cp $(BUILD_TARGET_CACHE)/chaosblade-exec-middleware/$(BUILD_TARGET_BIN)/* $(BUILD_TARGET_BIN)
 	cp $(BUILD_TARGET_CACHE)/chaosblade-exec-middleware/$(BUILD_TARGET_YAML)/* $(BUILD_TARGET_YAML)
@@ -163,6 +169,7 @@ ifdef ALERTMSG
 endif
 	git -C $(BUILD_TARGET_CACHE)/chaosblade-exec-cloud pull origin $(BLADE_EXEC_CLOUD_BRANCH)
 endif
+	cd $(BUILD_TARGET_CACHE)/chaosblade-exec-cloud && go mod tidy && cd $(BLADE_SRC_ROOT)
 	make -C $(BUILD_TARGET_CACHE)/chaosblade-exec-cloud
 	cp $(BUILD_TARGET_CACHE)/chaosblade-exec-cloud/$(BUILD_TARGET_BIN)/* $(BUILD_TARGET_BIN)
 	cp $(BUILD_TARGET_CACHE)/chaosblade-exec-cloud/$(BUILD_TARGET_YAML)/* $(BUILD_TARGET_YAML)
@@ -174,7 +181,7 @@ ifneq ($(BUILD_TARGET_CACHE)/chaosblade-operator, $(wildcard $(BUILD_TARGET_CACH
 else
 	git -C $(BUILD_TARGET_CACHE)/chaosblade-operator pull origin $(BLADE_OPERATOR_BRANCH)
 endif
-	make -C $(BUILD_TARGET_CACHE)/chaosblade-operator
+	cd $(BUILD_TARGET_CACHE)/chaosblade-operator && go mod tidy && cd $(BLADE_SRC_ROOT)
 	cp $(BUILD_TARGET_CACHE)/chaosblade-operator/$(BUILD_TARGET_BIN)/* $(BUILD_TARGET_BIN)
 	cp $(BUILD_TARGET_CACHE)/chaosblade-operator/$(BUILD_TARGET_YAML)/* $(BUILD_TARGET_YAML)
 
@@ -245,6 +252,12 @@ build_upx_image:
  		-f build/image/upx/Dockerfile \
  		-t chaosblade-upx:3.96 build/image/upx
 
+build_build_arm_image: ## Build chaosblade-tool-arm image
+	docker build -f $(BUILD_ARM_IMAGE_BUILD_PATH)/Dockerfile \
+		--platform linux/arm64 \
+		-t chaosbladeio/chaosblade-build-arm:$(BLADE_VERSION) \
+		$(BUILD_ARM_IMAGE_BUILD_PATH)
+
 ##@ Other
 upx: ## Upx compression by docker image
 	docker run --rm \
@@ -272,6 +285,7 @@ check_yaml:
 ## Select scenario build linux version by docker image
 build_linux_with_arg:
 	docker run --rm \
+		--platform linux/amd64 \
 		-v $(shell echo -n ${GOPATH}):/go \
 		-w /go/src/github.com/chaosblade-io/chaosblade \
 		-v ~/.m2/repository:/root/.m2/repository \
@@ -280,13 +294,13 @@ build_linux_with_arg:
 
 ## Select scenario build linux arm version by docker image
 build_linux_arm_with_arg:
-	docker run --rm --privileged multiarch/qemu-user-static:register --reset
+	#docker run --rm --privileged multiarch/qemu-user-static:register --reset
 	docker run --rm \
 		-v $(shell echo -n ${GOPATH}):/go \
 		-w /go/src/github.com/chaosblade-io/chaosblade \
 		-v ~/.m2/repository:/root/.m2/repository \
 		-v $(shell pwd):/go/src/github.com/chaosblade-io/chaosblade \
-		chaosbladeio/chaosblade-build-arm:latest build_with $$ARGS
+		chaosbladeio/chaosblade-build-arm:$(BLADE_VERSION) build_with $$ARGS
 
 # create cache dir
 mkdir_build_target:
